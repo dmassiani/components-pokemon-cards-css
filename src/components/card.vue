@@ -1,9 +1,3 @@
-<!--
- * @Author: 时不待我 790002517@qq.com
- * @Date: 2022-12-17 22:24:29
- * @LastEditors: 时不待我 790002517@qq.com
- * @LastEditTime: 2022-12-18 14:31:14
--->
 <template>
   <div
     class="card"
@@ -43,240 +37,50 @@
   </div>
 </template>
 
-<script lang="ts">
-import { Component, Vue, Prop, Ref, Watch } from "vue-property-decorator";
+<script setup lang="ts">
 import { useSpring } from "@vueuse/motion";
 import { clamp, round } from "@/helpers/Math";
+import { ref, onMounted, onUnmounted, watch, reactive } from "vue";
 import CardShine from "@/components/card-shine.vue";
 import CardGlare from "@/components/card-glare.vue";
 
-const galaxyPosition = Math.floor(Math.random() * 1500);
-const back_img =
-  "https://tcg.pokemon.com/assets/img/global/tcg-card-back-2x.jpg";
+const props = defineProps({
+  img: String,
+  name: String,
+  number: Number,
+  supertype: String,
+  backimg: String,
+  subtypes: Array,
+  rarity: String,
+  gallery: Boolean,
+  active: Boolean,
+});
 
-@Component({
-  name: "card",
-  components: { CardShine, CardGlare },
-})
-export default class Card extends Vue {
-  @Prop() img!: string;
-  @Prop() name!: string;
-  @Prop() number!: number;
-  @Prop() supertype!: string;
-  @Prop() backimg!: string;
-  @Prop() subtypes!: string[];
-  @Prop() rarity!: string;
-  @Prop() gallery!: boolean;
-  @Prop() active!: boolean;
-  @Ref("card") thisCard;
-  @Ref("rotator") rotator;
+let thisCard = ref(null);
+let rotator = ref(null);
 
-  private springR = { stiffness: 666, damping: 25 };
-  private springD = { stiffness: 333, damping: 45 };
+let springR = { stiffness: 666, damping: 25 };
+let springD = { stiffness: 333, damping: 45 };
 
-  private springRotate = useSpring({ x: 0, y: 0 }, this.springR);
-  private springGlare = useSpring({ x: 50, y: 50, o: 0 }, this.springR);
-  private springBackground = useSpring({ x: 50, y: 50 }, this.springR);
+let springRotate = useSpring({ x: 0, y: 0 }, springR);
+let springGlare = useSpring({ x: 50, y: 50, o: 0 }, springR);
+let springBackground = useSpring({ x: 50, y: 50 }, springR);
 
-  private springRotateDelta = useSpring({ x: 0, y: 0 }, this.springD);
-  private springTranslate = useSpring({ x: 0, y: 0 }, this.springD);
-  private springScale = useSpring({ s: 1 }, this.springD);
+let springRotateDelta = useSpring({ x: 0, y: 0 }, springD);
+let springTranslate = useSpring({ x: 0, y: 0 }, springD);
+let springScale = useSpring({ s: 1 }, springD);
 
-  private firstPop = true;
-  interacting = false;
-  loading = true;
-  debounce;
-  back_loading;
-  front_loading;
-  front_img = "";
-  back_img = this.backimg;
-  get styles() {
-    return `
-		--mx: ${this.springGlare.values.x}%;
-		--my: ${this.springGlare.values.y}%;
-		--tx: ${this.springTranslate.values.x}px;
-		--ty: ${this.springTranslate.values.y}px;
-		--s: ${this.springScale.values.s};
-		--o: ${this.springGlare.values.o};
-		--rx: ${this.springRotate.values.x + this.springRotateDelta.values.x}deg;
-		--ry: ${this.springRotate.values.y + this.springRotateDelta.values.y}deg;
-		--pos: ${this.springBackground.values.x}% ${this.springBackground.values.y}%;
-		--posx: ${this.springBackground.values.x}%;
-		--posy: ${this.springBackground.values.y}%;
-		--hyp: ${clamp(
-      Math.sqrt(
-        (this.springGlare.values.y - 50) * (this.springGlare.values.y - 50) +
-          (this.springGlare.values.x - 50) * (this.springGlare.values.x - 50)
-      ) / 50,
-      0,
-      1
-    )};
-    --galaxybg: center ${galaxyPosition}px;
-	  `;
-  }
+let firstPop = true;
+let interacting = false;
+let loading = true;
+let debounce;
+let back_loading;
+let front_loading;
+let front_img = "";
+let back_img = props.backimg;
 
-  created() {
-    const img_base = this.img.startsWith("http")
-      ? ""
-      : "https://images.pokemontcg.io/";
-    this.front_img = img_base + this.img;
+// Your methods here...
 
-    if (this.backimg == "" || this.backimg == undefined) {
-      this.back_img = back_img;
-    } else {
-      this.back_img = this.backimg;
-    }
-  }
-  mounted() {
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  destroyed() {
-    document.removeEventListener("scroll", this.reposition);
-  }
-  reposition(e) {
-    clearTimeout(this.debounce);
-    this.debounce = setTimeout(() => {
-      if (this.active) {
-        this.setCenter();
-      }
-    }, 300);
-  }
-
-  setCenter() {
-    const rect = this.thisCard.getBoundingClientRect(); // get element's size/position
-    const view = document.documentElement; // get window/viewport size
-
-    const delta = {
-      x: round(view.clientWidth / 2 - rect.x - rect.width / 2),
-      y: round(view.clientHeight / 2 - rect.y - rect.height / 2),
-    };
-    this.springTranslate.set({
-      x: delta.x,
-      y: delta.y,
-    });
-  }
-
-  interact(e) {
-    if (this.active) {
-      this.interacting = true;
-    }
-
-    if (e.type === "touchmove") {
-      e.clientX = e.touches[0].clientX;
-      e.clientY = e.touches[0].clientY;
-    }
-
-    const $el = e.target;
-    const rect = $el.getBoundingClientRect(); // get element's current size/position
-    const absolute = {
-      x: e.clientX - rect.left, // get mouse position from left
-      y: e.clientY - rect.top, // get mouse position from right
-    };
-    const percent = {
-      x: round((100 / rect.width) * absolute.x),
-      y: round((100 / rect.height) * absolute.y),
-    };
-    const center = {
-      x: percent.x - 50,
-      y: percent.y - 50,
-    };
-
-    this.springBackground.values.stiffness = this.springR.stiffness;
-    this.springBackground.values.damping = this.springR.damping;
-    this.springBackground.set({
-      x: round(50 + percent.x / 4 - 12.5),
-      y: round(50 + percent.y / 3 - 16.67),
-    });
-    this.springRotate.values.stiffness = this.springR.stiffness;
-    this.springRotate.values.damping = this.springR.damping;
-    this.springRotate.set({
-      x: round(-(center.x / 3.5)),
-      y: round(center.y / 2),
-    });
-    this.springGlare.values.stiffness = this.springR.stiffness;
-    this.springGlare.values.damping = this.springR.damping;
-    this.springGlare.set({
-      x: percent.x,
-      y: percent.y,
-      o: 1,
-    });
-  }
-
-  imageLoader() {
-    this.loading = false;
-  }
-
-  interactEnd(e, delay = 100) {
-    setTimeout(() => {
-      const snapStiff = 0.01;
-      const snapDamp = 0.06;
-      this.interacting = false;
-
-      this.springRotate.values.stiffness = snapStiff;
-      this.springRotate.values.damping = snapDamp;
-      this.springRotate.set({ x: 0, y: 0 });
-
-      this.springGlare.values.stiffness = snapStiff;
-      this.springGlare.values.damping = snapDamp;
-      this.springGlare.set({ x: 50, y: 50, o: 0 });
-
-      this.springBackground.values.stiffness = snapStiff;
-      this.springBackground.values.damping = snapDamp;
-      this.springBackground.set({ x: 50, y: 50 });
-    }, delay);
-  }
-
-  private _popover() {
-    const rect = this.thisCard.getBoundingClientRect(); // get element's size/position
-    let delay = 100;
-    let scaleW = (window.innerWidth / rect.width) * 0.9;
-    let scaleH = (window.innerHeight / rect.height) * 0.9;
-    let scaleF = 1.75;
-    this._setCenter();
-    if (this.firstPop) {
-      delay = 1000;
-      this.springRotateDelta.set({
-        x: 360,
-        y: 0,
-      });
-      this.firstPop = false;
-    }
-    this.springScale.set({ s: Math.min(scaleW, scaleH, scaleF) });
-    this.interactEnd(null, delay);
-  }
-
-  private _retreat() {
-    this.springScale.set({ s: 1 });
-    this.springTranslate.set({ x: 0, y: 0 });
-    this.springRotateDelta.set({ x: 0, y: 0 });
-    this.interactEnd(null, 100);
-  }
-
-  private _setCenter() {
-    const rect = this.thisCard.getBoundingClientRect(); // get element's size/position
-    const view = document.documentElement; // get window/viewport size
-    const delta = {
-      x: round(view.clientWidth / 2 - rect.x - rect.width / 2),
-      y: round(view.clientHeight / 2 - rect.y - rect.height / 2),
-    };
-    this.springTranslate.set({
-      x: delta.x,
-      y: delta.y,
-    });
-  }
-
-  @Watch("active")
-  private _onActiveChange(isActive, wasActive) {
-    if (isActive !== wasActive) {
-      if (isActive) {
-        this._popover();
-      } else {
-        this._retreat();
-      }
-    }
-  }
-}
 </script>
 
 <style lang="scss" scoped>
